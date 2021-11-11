@@ -1,0 +1,15 @@
+serviceName: TCP Load Balancer
+stickyConnections: true
+nodes:
+  - address: 127.0.0.1:81
+    resourceMonitorAgentPort: 82
+    maxConnections: 20 # a simpler alternative to this would be just a generic "weight" parameter
+#    connectionsPerSecond: 5 # this would be an alternative to the above "weight" that admins allot to each node
+                             # in this scenario, an additional map needs to be kept (something akin to a rate limiter)
+                             # to calculate requests per second
+  - address: 127.0.0.1:83
+    resourceMonitorAgentPort: 84
+    maxConnections: 15
+  - address: 127.0.0.1:85
+    resourceMonitorAgentPort: 86
+    maxConnections: 10
