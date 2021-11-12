@@ -1,5 +1,8 @@
 serviceName: TCP Load Balancer
 stickyConnections: true
+resourceMonitoringAgentQueryInterval: 10s
+# memoryLeakCheck: true
+# responseTimeDegradationCheck: true
 nodes:
   - address: 127.0.0.1:81
     resourceMonitorAgentPort: 82
