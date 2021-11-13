@@ -1,0 +1,16 @@
+platform: linux
+image_resource:
+  type: registry-image
+  source:
+    repository: golang
+    tag: 1.16-bullseye
+run:
+  path: 'bash'
+  args:
+  - -c
+  - |
+    echo "cpu: ((CPU_UTIL_PERCENT))" > emulator-config/config.yml
+    echo "memory: ((FREE_MEMORY_IN_KB))" >> emulator-config/config.yml
+    echo "latency: ((LATENCY))" >> emulator-config/config.yml
+outputs:
+- name: emulator-config

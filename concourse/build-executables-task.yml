@@ -1,0 +1,24 @@
+platform: linux
+image_resource:
+  type: registry-image
+  source:
+    repository: golang
+    tag: 1.16-bullseye
+inputs:
+  - name: load-balancer-repo
+  - name: server-emulator-gist
+outputs:
+  - name: binaries
+run:
+  path: 'bash'
+  args:
+  - -c
+  - |
+    cd load-balancer-repo
+    go get ./...
+    go build ./... -o lb
+    cp lb ../binaries/lb
+    cd ../server-emulator-gist
+    go get ./...
+    go build ./... -o emulator
+    cp emulator ../binaries/emulator

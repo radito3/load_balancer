@@ -1,0 +1,74 @@
+resources:
+- name: load-balancer-repo
+  type: git
+  source:
+     uri: ((LB_REPO))
+     skip_ssl_verification: true
+  
+- name: server-emulator-gist
+  type: git
+  source:
+     uri: ((EMULATOR_GIST))
+     skip_ssl_verification: true
+
+golang-base-image: &base-image
+  type: registry-image
+  source:
+    repository: golang
+    tag: 1.16-bullseye
+
+jobs:
+- name: base-test
+  plan:
+  - in_parallel:
+    - get: load-balancer-repo
+      trigger: true
+    - get: server-emulator-gist
+      trigger: true
+  - in_parallel:    
+    - task: generate-load-balancer-config
+      file: load-balancer-repo/concourse/generate-lb-config.yml
+      params:
+        STICKY_CONNECTIONS: true
+        POLL_RESOURCES_INTERVAL: 10s
+        NODES: >
+         - address: 127.0.0.1:81
+           resourceMonitorAgentPort: 82
+           maxConnections: 20
+         - address: 127.0.0.1:83
+           resourceMonitorAgentPort: 84
+           maxConnections: 15
+         - address: 127.0.0.1:85
+           resourceMonitorAgentPort: 86
+           maxConnections: 10
+    - task: generate-emulator-config
+      file: load-balancer-repo/concourse/generate-emulator-config.yml
+      params:
+        CPU_UTIL_PERCENT: 20
+        FREE_MEMORY_IN_KB: 20000
+        LATENCY: 2s
+  - task: build-executables
+    file: load-balancer-repo/concourse/build-executables-task.yml
+  - task: test-base-functionality
+    timeout: 3m   # temporary; until running programs are shut down gracefully
+    config:
+      platform: linux
+      image_resource: *base-image
+      inputs:
+      - name: binaries
+      - name: lb-config
+      - name: emulator-config
+      run:
+        path: 'bash'
+        args:
+        - -c
+        - |
+          binaries/emulator 81 emulator-config/config.yml &
+          binaries/emulator 83 emulator-config/config.yml &
+          binaries/emulator 85 emulator-config/config.yml &
+          binaries/lb 80 lb-config/config.yml &             # figure out how to kill these bash jobs later
+          # TODO: ensure netcat is installed
+          echo "ping 1" | nc 127.0.0.1 80
+          echo "ping 2" | nc 127.0.0.1 80
+          echo "ping 3" | nc 127.0.0.1 80
+    
