@@ -34,6 +34,5 @@ run:
     echo "installing netcat..."
     apt update
     apt install -y netcat
-    nc --version
     cp $(which nc) ../binaries/nc
     echo "netcat installed"

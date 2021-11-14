@@ -35,8 +35,6 @@ type LoadStatistics struct {
 	usedResources     resources
 }
 
-var defaultResources resources
-
 type Config struct {
 	ServiceName                          string        `yaml:"serviceName"`
 	StickyConnections                    bool          `yaml:"stickyConnections"`
@@ -129,34 +127,33 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 		conn, err := net.DialUDP("udp", nil, addr)
 		if err != nil {
 			log.Println(err)
-			lb.nodeResources[node.id] = defaultResources
+			lb.nodeResources[node.id] = resources{}
 			time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 			continue
 		}
-		lb.nodeResources[node.id] = readUsedResources(conn)
+		lb.nodeResources[node.id] = lb.readUsedResources(conn)
 		conn.Close()
 		time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 	}
 }
 
-func readUsedResources(conn *net.UDPConn) resources {
+func (lb *LoadBalancer) readUsedResources(conn *net.UDPConn) resources {
 	_, err := conn.Write([]byte("connect"))
 	if err != nil {
 		log.Println(err)
-		return defaultResources
+		return resources{}
 	}
 
 	buff := make([]byte, 1024)
 	n, _, err := conn.ReadFromUDP(buff)
-	buff = buff[:n]
-	return parseResourcesFromJson(buff)
+	return lb.parseResourcesFromJson(buff[:n])
 }
 
-func parseResourcesFromJson(data []byte) resources {
+func (lb *LoadBalancer) parseResourcesFromJson(data []byte) resources {
 	var result resources
 	err := json.Unmarshal(data, &result)
 	if err != nil {
-		return defaultResources
+		return resources{}
 	}
 	return result
 }
