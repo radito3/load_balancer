@@ -57,6 +57,7 @@ func NewLoadBalancer(config Config) *LoadBalancer {
 		connections:                          make(map[uint]uint),
 		sourceToDestinationHashMap:           make(map[string]node),
 		responseTimes:                        make(map[uint][]time.Duration),
+		nodeResources:                        make(map[uint]resources),
 	}
 }
 
