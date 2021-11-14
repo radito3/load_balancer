@@ -16,10 +16,10 @@ type LoadBalancer struct {
 	useStickyConnections                 bool
 	resourceMonitoringAgentQueryInterval time.Duration
 	nodes                                []node
-	connections                          map[uint]uint
-	sourceToDestinationHashMap           map[string]node
-	responseTimes                        map[uint][]time.Duration
-	nodeResources                        map[uint]resources
+	connections                          *util.ConcurrentUintMap
+	sourceToDestinationHashMap           *util.ConcurrentStringMap
+	responseTimes                        *util.ConcurrentUintMap
+	nodeResources                        *util.ConcurrentUintMap
 }
 
 type resources struct {
@@ -54,10 +54,10 @@ func NewLoadBalancer(config Config) *LoadBalancer {
 		useStickyConnections:                 config.StickyConnections,
 		resourceMonitoringAgentQueryInterval: config.resourceMonitoringAgentQueryInterval,
 		nodes:                                createNodes(config.Nodes...),
-		connections:                          make(map[uint]uint),
-		sourceToDestinationHashMap:           make(map[string]node),
-		responseTimes:                        make(map[uint][]time.Duration),
-		nodeResources:                        make(map[uint]resources),
+		connections:                          util.NewUintMap(),
+		sourceToDestinationHashMap:           util.NewStringMap(),
+		responseTimes:                        util.NewUintMap(),
+		nodeResources:                        util.NewUintMap(),
 	}
 }
 
@@ -128,11 +128,11 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 		conn, err := net.DialUDP("udp", nil, addr)
 		if err != nil {
 			log.Println(err)
-			lb.nodeResources[node.id] = resources{}
+			lb.nodeResources.Put(node.id, resources{})
 			time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 			continue
 		}
-		lb.nodeResources[node.id] = lb.readUsedResources(conn)
+		lb.nodeResources.Put(node.id, lb.readUsedResources(conn))
 		conn.Close()
 		time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 	}
@@ -172,11 +172,11 @@ func (lb *LoadBalancer) handleTcpConn(conn net.Conn) error {
 	}
 	defer forwardingConn.Close()
 
-	lb.connections[node.id]++
+	lb.incrementNodeConnections(node.id)
 	defer lb.decrementNodeConnections(node.id)
 
 	if lb.useStickyConnections {
-		lb.sourceToDestinationHashMap[sourceIpHash] = node
+		lb.sourceToDestinationHashMap.Put(sourceIpHash, node)
 	}
 
 	_, err = io.Copy(forwardingConn, conn)
@@ -194,20 +194,32 @@ func (lb *LoadBalancer) handleTcpConn(conn net.Conn) error {
 	return nil
 }
 
+func (lb *LoadBalancer) incrementNodeConnections(nodeId uint) {
+	conns, present := lb.connections.Get(nodeId)
+	if present {
+		lb.connections.Put(nodeId, conns.(uint) + 1)
+	} else {
+		lb.connections.Put(nodeId, uint(1))
+	}
+}
+
 func (lb *LoadBalancer) decrementNodeConnections(nodeId uint) {
-	conns := lb.connections[nodeId]
-	if conns > 0 {
-		lb.connections[nodeId]--
+	conns, present := lb.connections.Get(nodeId)
+	if present && conns.(uint) > 0 {
+		lb.connections.Put(nodeId, conns.(uint) - 1)
 	}
 }
 
 func (lb *LoadBalancer) addResponseTime(nodeId uint, responseTime time.Duration) {
-	times := lb.responseTimes[nodeId]
-	if len(times) >= 20 {
-		times = append([]time.Duration{}, times[1:]...)
+	times, present := lb.responseTimes.Get(nodeId)
+	if !present {
+		times = []time.Duration{}
 	}
-	times = append(times, responseTime)
-	lb.responseTimes[nodeId] = times
+	if len(times.([]time.Duration)) >= 20 {
+		times = append([]time.Duration{}, times.([]time.Duration)[1:]...)
+	}
+	times = append(times.([]time.Duration), responseTime)
+	lb.responseTimes.Put(nodeId, times)
 }
 
 /*
@@ -286,13 +298,25 @@ this may or may not be significant in a real-world scenario
 func (lb *LoadBalancer) pickNode(sourceIpHash string) node {
 	var loadStats []LoadStatistics
 	for _, node := range lb.nodes {
-		_, ok := lb.sourceToDestinationHashMap[sourceIpHash]
+		_, presentSourceHash := lb.sourceToDestinationHashMap.Get(sourceIpHash)
+		conns, presentConns := lb.connections.Get(node.id)
+		if !presentConns {
+			conns = uint(0)
+		}
+		resTimes, presentResTimes := lb.responseTimes.Get(node.id)
+		if !presentResTimes {
+			resTimes = []time.Duration{}
+		}
+		nodeResources, presentResources := lb.nodeResources.Get(node.id)
+		if !presentResources {
+			nodeResources = resources{}
+		}
 		stats := LoadStatistics{
 			node:              node,
-			connections:       lb.connections[node.id],
-			matchesSourceHash: ok,
-			responseTimes:     lb.responseTimes[node.id],
-			usedResources:     lb.nodeResources[node.id],
+			connections:       conns.(uint),
+			matchesSourceHash: presentSourceHash,
+			responseTimes:     resTimes.([]time.Duration),
+			usedResources:     nodeResources.(resources),
 		}
 		loadStats = append(loadStats, stats)
 	}
