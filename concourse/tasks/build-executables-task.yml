@@ -15,10 +15,12 @@ run:
   - -c
   - |
     cd load-balancer-repo
+    go mod init
     go get ./...
-    go build ./... -o lb
+    go build -o lb
     cp lb ../binaries/lb
     cd ../server-emulator-gist
+    go mod init
     go get ./...
-    go build ./... -o emulator
+    go build -o emulator
     cp emulator ../binaries/emulator
