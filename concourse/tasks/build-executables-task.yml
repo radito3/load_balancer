@@ -14,6 +14,7 @@ run:
   args:
   - -c
   - |
+    set -e
     cd load-balancer-repo
     echo "building load balancer binary..."
     go mod init
@@ -29,6 +30,9 @@ run:
     cp emulator ../binaries/emulator
     echo "built emulator binary"
     echo "installing netcat..."
+    cat /etc/apt/sources.list
+    sudo apt update -y
     apt install -y netcat
+    nc --version
     cp $(which nc) ../binaries/nc
     echo "netcat installed"
