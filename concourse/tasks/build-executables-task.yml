@@ -14,13 +14,15 @@ run:
   args:
   - -c
   - |
-    set -e
+    set -e    # exit on error
+    # load balancer
     cd load-balancer-repo
     echo "building load balancer binary..."
     go get ./...
     go build -o lb
     cp lb ../binaries/lb
     echo "built load balancer binary"
+    # emulator
     cd ../server-emulator-gist
     echo "building emulator binary..."
     go mod init emulator
@@ -28,9 +30,9 @@ run:
     go build -o emulator
     cp emulator ../binaries/emulator
     echo "built emulator binary"
+    # netcat
     echo "installing netcat..."
-    cat /etc/apt/sources.list
-    sudo apt update -y
+    apt update
     apt install -y netcat
     nc --version
     cp $(which nc) ../binaries/nc
