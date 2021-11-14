@@ -17,7 +17,6 @@ run:
     set -e
     cd load-balancer-repo
     echo "building load balancer binary..."
-    go mod init
     go get ./...
     go build -o lb
     cp lb ../binaries/lb
