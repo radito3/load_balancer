@@ -18,5 +18,6 @@ run:
     binaries/emulator 83 emulator-config/config_2.yml &
     binaries/emulator 85 emulator-config/config_3.yml &
     binaries/lb 80 lb-config/config.yml &
+    cp binaries/nc /usr/local/bin/nc
     bash load-balancer-repo/concourse/tests/${TEST}
     jobs -p | xargs kill

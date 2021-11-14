@@ -15,14 +15,20 @@ run:
   - -c
   - |
     cd load-balancer-repo
+    echo "building load balancer binary..."
     go mod init
     go get ./...
     go build -o lb
     cp lb ../binaries/lb
     echo "built load balancer binary"
     cd ../server-emulator-gist
+    echo "building emulator binary..."
     go mod init emulator
     go get ./...
     go build -o emulator
     cp emulator ../binaries/emulator
     echo "built emulator binary"
+    echo "installing netcat..."
+    apt install -y netcat
+    cp $(which nc) ../binaries/nc
+    echo "netcat installed"
