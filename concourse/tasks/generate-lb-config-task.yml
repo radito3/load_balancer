@@ -10,9 +10,9 @@ run:
   - -c
   - |
     echo "serviceName: TCP Load Balancer" > lb-config/config.yml
-    echo "stickyConnections: ((STICKY_CONNECTIONS))" >> lb-config/config.yml
-    echo "resourceMonitoringAgentQueryInterval: ((POLL_RESOURCES_INTERVAL))" >> lb-config/config.yml
+    echo "stickyConnections: ${STICKY_CONNECTIONS}" >> lb-config/config.yml
+    echo "resourceMonitoringAgentQueryInterval: ${POLL_RESOURCES_INTERVAL}" >> lb-config/config.yml
     echo "nodes:" >> lb-config/config.yml
-    echo "((NODES))" >> lb-config/config.yml
+    echo "${NODES}" >> lb-config/config.yml
 outputs:
 - name: lb-config

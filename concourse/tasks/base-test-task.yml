@@ -1,0 +1,22 @@
+platform: linux
+image_resource:
+  type: registry-image
+  source:
+    repository: golang
+    tag: 1.16-bullseye
+inputs:
+- name: load-balancer-repo
+- name: binaries
+- name: lb-config
+- name: emulator-config
+run:
+  path: 'bash'
+  args:
+  - -c
+  - |
+    binaries/emulator 81 emulator-config/config_1.yml &
+    binaries/emulator 83 emulator-config/config_2.yml &
+    binaries/emulator 85 emulator-config/config_3.yml &
+    binaries/lb 80 lb-config/config.yml &
+    bash load-balancer-repo/concourse/tests/${TEST}
+    jobs -p | xargs kill
