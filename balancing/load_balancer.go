@@ -38,7 +38,7 @@ type LoadStatistics struct {
 type Config struct {
 	ServiceName                          string        `yaml:"serviceName"`
 	StickyConnections                    bool          `yaml:"stickyConnections"`
-	resourceMonitoringAgentQueryInterval time.Duration `yaml:"resourceMonitoringAgentQueryInterval"`
+	ResourceMonitoringAgentQueryInterval time.Duration `yaml:"resourceMonitoringAgentQueryInterval"`
 	Nodes                                []NodeInfo    `yaml:"nodes"`
 }
 
@@ -49,13 +49,10 @@ type NodeInfo struct {
 }
 
 func NewLoadBalancer(config Config) *LoadBalancer {
-	if config.resourceMonitoringAgentQueryInterval == time.Duration(0) {
-		config.resourceMonitoringAgentQueryInterval = 10 * time.Second
-	}
 	return &LoadBalancer{
 		serviceName:                          config.ServiceName,
 		useStickyConnections:                 config.StickyConnections,
-		resourceMonitoringAgentQueryInterval: config.resourceMonitoringAgentQueryInterval,
+		resourceMonitoringAgentQueryInterval: config.ResourceMonitoringAgentQueryInterval,
 		nodes:                                createNodes(config.Nodes...),
 		connections:                          util.NewUintMap(),
 		sourceToDestinationHashMap:           util.NewStringMap(),

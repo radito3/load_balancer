@@ -1,7 +1,6 @@
 package balancing
 
 import (
-	"log"
 	"math"
 	"sort"
 	"time"
@@ -17,10 +16,10 @@ type formulaElement int
 const (
 	percentAvailConnections formulaElement = iota
 	sourceIpHashMatch
-	lowestMaxResponseTime
-	lowestAverageResponseTime
-	lowestAverageDeviationInResponseTimes
-	lowestCpuUtilization
+	maxResponseTime
+	averageResponseTime
+	averageDeviationInResponseTimes
+	cpuUtilization
 	highestFreeMemory
 )
 
@@ -28,13 +27,13 @@ var formulaCoefficients map[formulaElement]float32
 
 func init() {
 	formulaCoefficients = map[formulaElement]float32{
-		percentAvailConnections:               float32(0.25),
-		sourceIpHashMatch:                     float32(0.15),
-		lowestMaxResponseTime:                 float32(0.08),
-		lowestAverageResponseTime:             float32(0.13),
-		lowestAverageDeviationInResponseTimes: float32(0.04),
-		lowestCpuUtilization:                  float32(0.20),
-		highestFreeMemory:                     float32(0.15),
+		percentAvailConnections:         float32(0.25),
+		sourceIpHashMatch:               float32(0.15),  //maybe this needs to be a higher coefficient or just 90%
+		maxResponseTime:                 float32(-0.08),
+		averageResponseTime:             float32(-0.13),
+		averageDeviationInResponseTimes: float32(-0.04),
+		cpuUtilization:                  float32(-0.20),
+		highestFreeMemory:               float32(0.15),
 	}
 }
 
@@ -43,13 +42,13 @@ func init() {
 // +
 // (if config.stickyConnections is true) 0.15 if hash(client.address) matches current node else 0
 // +
-// max response time * 0.08
+// max response time * -0.08
 // +
-// average response time * 0.13
+// average response time * -0.13
 // +
-// average deviation in response times * 0.04
+// average deviation in response times * -0.04
 // +
-// CPU utilization * 0.20
+// CPU utilization * -0.20
 // +
 // highest free memory order index * 0.15
 func (p *nodePicker) Pick() node {
@@ -70,24 +69,24 @@ func (p *nodePicker) Pick() node {
 	}
 	//max response time
 	for _, stats := range p.loadStatistics {
-		maxResponseTime := p.findMaxTime(stats.responseTimes)
-		resultMap[stats.node.id] += float32(maxResponseTime.Milliseconds()) * formulaCoefficients[lowestMaxResponseTime]
+		maxRespTime := p.findMaxTime(stats.responseTimes)
+		resultMap[stats.node.id] += float32(maxRespTime.Milliseconds()) * formulaCoefficients[maxResponseTime]
 	}
 	//avg response time
 	for _, stats := range p.loadStatistics {
 		avgResponseTime := p.findAvgTime(stats.responseTimes)
-		resultMap[stats.node.id] += avgResponseTime * formulaCoefficients[lowestAverageResponseTime]
+		resultMap[stats.node.id] += avgResponseTime * formulaCoefficients[averageResponseTime]
 	}
 	//std dev in response time
 	for _, stats := range p.loadStatistics {
 		stdDev := p.findStdDev(stats.responseTimes)
-		resultMap[stats.node.id] += stdDev * formulaCoefficients[lowestAverageDeviationInResponseTimes]
+		resultMap[stats.node.id] += stdDev * formulaCoefficients[averageDeviationInResponseTimes]
 	}
 	if p.shouldIncludeResourceInfo() {
 		//cpu utilization
 		for _, stats := range p.loadStatistics {
 			cpuUtilPercent := stats.usedResources.CpuUtilization
-			resultMap[stats.node.id] += float32(cpuUtilPercent) * formulaCoefficients[lowestCpuUtilization]
+			resultMap[stats.node.id] += float32(cpuUtilPercent) * formulaCoefficients[cpuUtilization]
 		}
 		//free memory
 		sort.Slice(p.loadStatistics, func(i, j int) bool {
@@ -96,11 +95,6 @@ func (p *nodePicker) Pick() node {
 		for i, stats := range p.loadStatistics {
 			resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[highestFreeMemory]
 		}
-	}
-
-	log.Println("node values:")
-	for id, value := range resultMap {
-		log.Printf("id: %d => val: %f\n", id, value)
 	}
 
 	winnerNodeId := p.getWinnerNodeId(resultMap)
@@ -123,6 +117,9 @@ func (p *nodePicker) findMaxTime(arr []time.Duration) time.Duration {
 }
 
 func (p *nodePicker) findAvgTime(arr []time.Duration) float32 {
+	if len(arr) == 0 {
+		return 0
+	}
 	var sum int64
 	for _, el := range arr {
 		sum += el.Milliseconds()
@@ -132,6 +129,9 @@ func (p *nodePicker) findAvgTime(arr []time.Duration) float32 {
 
 func (p *nodePicker) findStdDev(arr []time.Duration) float32 {
 	n := len(arr)
+	if n < 2 {
+		return 0
+	}
 	mean := p.findAvgTime(arr)
 	var sum float64
 	for _, el := range arr {

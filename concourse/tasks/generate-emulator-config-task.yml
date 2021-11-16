@@ -13,13 +13,16 @@ run:
     echo "cpu: ${CPU_UTIL_PERCENT_1}" > emulator-config/config_1.yml
     echo "memory: ${FREE_MEMORY_IN_KB_1}" >> emulator-config/config_1.yml
     echo "latency: ${LATENCY_1}" >> emulator-config/config_1.yml
+    cat emulator-config/config_1.yml
     # second node
     echo "cpu: ${CPU_UTIL_PERCENT_2}" > emulator-config/config_2.yml
     echo "memory: ${FREE_MEMORY_IN_KB_2}" >> emulator-config/config_2.yml
     echo "latency: ${LATENCY_2}" >> emulator-config/config_2.yml
+    cat emulator-config/config_2.yml
     # third node
     echo "cpu: ${CPU_UTIL_PERCENT_3}" > emulator-config/config_3.yml
     echo "memory: ${FREE_MEMORY_IN_KB_3}" >> emulator-config/config_3.yml
     echo "latency: ${LATENCY_3}" >> emulator-config/config_3.yml
+    cat emulator-config/config_3.yml
 outputs:
 - name: emulator-config
