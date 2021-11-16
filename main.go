@@ -13,6 +13,7 @@ func main() {
 		log.Fatalln("Invalid usage. Usage: load_balancer <port> <path to config file>")
 	}
 
+	log.SetPrefix("[load_balancer] [DEBUG] ")
 	port, _ := strconv.Atoi(os.Args[1])
 	bytes, err := os.ReadFile(os.Args[2])
 	if err != nil {

@@ -1,6 +1,7 @@
 package balancing
 
 import (
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -11,53 +12,80 @@ type nodePicker struct {
 	loadStatistics    []LoadStatistics
 }
 
-//least connections out of all nodes order index * 0.15 (in other words, sort the amount of remaining connections per node
-//in ascending order and take the node's index from that array)
-//+
-//percent of available connections * 0.15 (if max_conns == 30 and there are 15 active conns, this would be 50%)
-//+
-//(if config.stickyConnections is true) 0.15 if hash(client.address) matches current node else 0
-//+
-//lowest max response time order index * 0.08
-//+
-//lowest average response time order index * 0.13
-//+
-//lowest average deviation order index * 0.04
-//+
-//lowest CPU utilization order index * 0.15
-//+
-//highest free memory order index * 0.15
+type formulaElement int
 
+const (
+	leastConnections formulaElement = iota
+	percentAvailConnections
+	sourceIpHashMatch
+	lowestMaxResponseTime
+	lowestAverageResponseTime
+	lowestAverageDeviationInResponseTimes
+	lowestCpuUtilization
+	highestFreeMemory
+)
+
+var formulaCoefficients map[formulaElement]float32
+
+func init() {
+	formulaCoefficients = map[formulaElement]float32{
+		leastConnections:                      float32(0.15),
+		percentAvailConnections:               float32(0.15),
+		sourceIpHashMatch:                     float32(0.15),
+		lowestMaxResponseTime:                 float32(0.08),
+		lowestAverageResponseTime:             float32(0.13),
+		lowestAverageDeviationInResponseTimes: float32(0.04),
+		lowestCpuUtilization:                  float32(0.15),
+		highestFreeMemory:                     float32(0.15),
+	}
+}
+
+//Pick select node with the highest value based on following formula:
+// least connections out of all nodes order index * 0.15
+// +
+// percent of available connections * 0.15 (if max_conns == 30 and there are 15 active conns, this would be 50%)
+// +
+// (if config.stickyConnections is true) 0.15 if hash(client.address) matches current node else 0
+// +
+// lowest max response time order index * 0.08
+// +
+// lowest average response time order index * 0.13
+// +
+// lowest average deviation order index * 0.04
+// +
+// lowest CPU utilization order index * 0.15
+// +
+// highest free memory order index * 0.15
 func (p *nodePicker) Pick() node {
-	resultMap := make(map[uint]float32)
+	resultMap := make(map[uint]float32, len(p.loadStatistics))
 	//least connections
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
+	sort.SliceStable(p.loadStatistics, func(i, j int) bool {
 		return p.loadStatistics[i].connections > p.loadStatistics[j].connections
 	})
 	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] = float32(i + 1) * float32(0.15)
+		resultMap[stats.node.id] = float32(i+1) * formulaCoefficients[leastConnections]
 	}
 	//percent available connections
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
+	sort.SliceStable(p.loadStatistics, func(i, j int) bool {
 		iMaxConns := p.loadStatistics[i].node.maxConnections
 		jMaxConns := p.loadStatistics[j].node.maxConnections
-		iPercentConns := float32(int(p.loadStatistics[i].connections) / iMaxConns) * float32(100)
-		jPercentConns := float32(int(p.loadStatistics[j].connections) / jMaxConns) * float32(100)
+		iPercentConns := float32(int(p.loadStatistics[i].connections)/iMaxConns) * float32(100)
+		jPercentConns := float32(int(p.loadStatistics[j].connections)/jMaxConns) * float32(100)
 		return iPercentConns > jPercentConns
 	})
 	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.15)
+		resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[percentAvailConnections]
 	}
 	//source IP hash
 	if p.stickyConnections {
 		for _, stats := range p.loadStatistics {
 			if stats.matchesSourceHash {
-				resultMap[stats.node.id] += float32(0.15)
+				resultMap[stats.node.id] += formulaCoefficients[sourceIpHashMatch]
 			}
 		}
 	}
 	//max response time
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
+	sort.SliceStable(p.loadStatistics, func(i, j int) bool {
 		iResponseTimes := p.loadStatistics[i].responseTimes
 		jResponseTimes := p.loadStatistics[j].responseTimes
 		iMaxTime := p.findMaxTime(iResponseTimes)
@@ -65,10 +93,10 @@ func (p *nodePicker) Pick() node {
 		return iMaxTime > jMaxTime
 	})
 	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.08)
+		resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[lowestMaxResponseTime]
 	}
 	//avg response time
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
+	sort.SliceStable(p.loadStatistics, func(i, j int) bool {
 		iResponseTimes := p.loadStatistics[i].responseTimes
 		jResponseTimes := p.loadStatistics[j].responseTimes
 		iAvgTime := p.findAvgTime(iResponseTimes)
@@ -76,10 +104,10 @@ func (p *nodePicker) Pick() node {
 		return iAvgTime > jAvgTime
 	})
 	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.13)
+		resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[lowestAverageResponseTime]
 	}
 	//std dev in response time
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
+	sort.SliceStable(p.loadStatistics, func(i, j int) bool {
 		iResponseTimes := p.loadStatistics[i].responseTimes
 		jResponseTimes := p.loadStatistics[j].responseTimes
 		iStdDev := p.findStdDev(iResponseTimes)
@@ -87,33 +115,33 @@ func (p *nodePicker) Pick() node {
 		return iStdDev > jStdDev
 	})
 	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.04)
+		resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[lowestAverageDeviationInResponseTimes]
 	}
-	//cpu utilization
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
-		return p.loadStatistics[i].usedResources.CpuUtilization > p.loadStatistics[j].usedResources.CpuUtilization
-	})
-	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.15)
-	}
-	//free memory
-	sort.Slice(p.loadStatistics, func(i, j int) bool {
-		return p.loadStatistics[i].usedResources.FreeMemory < p.loadStatistics[j].usedResources.FreeMemory
-	})
-	for i, stats := range p.loadStatistics {
-		resultMap[stats.node.id] += float32(i + 1) * float32(0.15)
+	if p.shouldIncludeResourceInfo() {
+		//cpu utilization
+		sort.SliceStable(p.loadStatistics, func(i, j int) bool {
+			return p.loadStatistics[i].usedResources.CpuUtilization > p.loadStatistics[j].usedResources.CpuUtilization
+		})
+		for i, stats := range p.loadStatistics {
+			resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[lowestCpuUtilization]
+		}
+		//free memory
+		sort.SliceStable(p.loadStatistics, func(i, j int) bool {
+			return p.loadStatistics[i].usedResources.FreeMemory < p.loadStatistics[j].usedResources.FreeMemory
+		})
+		for i, stats := range p.loadStatistics {
+			resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[highestFreeMemory]
+		}
 	}
 
-	keys := make([]uint, 0, len(resultMap))
-	for k := range resultMap {
-		keys = append(keys, k)
+	log.Println("node values:")
+	for id, value := range resultMap {
+		log.Printf("id: %d => val: %f\n", id, value)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		return resultMap[keys[i]] > resultMap[keys[j]]
-	})
 
+	winnerNodeId := p.getWinnerNodeId(resultMap)
 	for _, stats := range p.loadStatistics {
-		if stats.node.id == keys[0] {
+		if stats.node.id == winnerNodeId {
 			return stats.node
 		}
 	}
@@ -143,17 +171,28 @@ func (p *nodePicker) findStdDev(arr []time.Duration) float64 {
 	mean := p.findAvgTime(arr)
 	var sum float64
 	for _, el := range arr {
-		sum += math.Pow(float64(el) - mean, 2.0)
+		sum += math.Pow(float64(el)-mean, 2.0)
 	}
-	varience := sum / float64(n - 1)
-	return math.Sqrt(varience)
+	variance := sum / float64(n-1)
+	return math.Sqrt(variance)
 }
 
-func (p *nodePicker) index(arr []LoadStatistics, el node) int {
-	for i, stats := range arr {
-		if stats.node.id == el.id {
-			return i
+func (p *nodePicker) shouldIncludeResourceInfo() bool {
+	for _, stats := range p.loadStatistics {
+		if stats.usedResources.FreeMemory == 0 && stats.usedResources.CpuUtilization == 0 {
+			return false
 		}
 	}
-	return -1
+	return true
+}
+
+func (p *nodePicker) getWinnerNodeId(nodeValues map[uint]float32) uint {
+	keys := make([]uint, 0, len(nodeValues))
+	for k := range nodeValues {
+		keys = append(keys, k)
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		return nodeValues[keys[i]] > nodeValues[keys[j]]
+	})
+	return keys[0]
 }

@@ -125,6 +125,7 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 	address := node.address + ":" + strconv.Itoa(int(node.resourceMonitorPort))
 	addr, _ := net.ResolveUDPAddr("udp", address)
 	for {
+		log.Printf("calling %s for a resource summary...\n", addr.String())
 		conn, err := net.DialUDP("udp", nil, addr)
 		if err != nil {
 			log.Println(err)
@@ -132,7 +133,9 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 			time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 			continue
 		}
-		lb.nodeResources.Put(node.id, lb.readUsedResources(conn))
+		res := lb.readUsedResources(conn)
+		log.Printf("resources from %s: %v\n", addr.String(), res)
+		lb.nodeResources.Put(node.id, res)
 		conn.Close()
 		time.Sleep(lb.resourceMonitoringAgentQueryInterval)
 	}
@@ -226,14 +229,18 @@ func (lb *LoadBalancer) addResponseTime(nodeId uint, responseTime time.Duration)
 Weighted least connections (keep connection counter) (30%)
 Source IP hash (keep map of source to destination addresses) (lowest priority) (15%)
 Response time (keep map of last 20 response times and compute a value for max (8%), avg (most priority) (13%) & std dev (4%)) (25%)
-Resource adaptive (call 127.0.0.1:81 on UDP for a json with the cpu & memory stats) (30%)
+Resource adaptive (call RMA for a json with the cpu & memory stats) (30%)
+(RMA - resource monitoring agent)
 
 -------
 Maybe:
 after a node's value is computed, a negative coefficient may be applied (value so far is multiplied by this)
 if the memory and latency values have been progressively getting worse (over the past few computations)
 
-to check progression
+to check for potential memory leaks
+if ~80% of last free memory values are only decreasing -> that could be a potential memory leak
+
+to check latency degradation
 calculate the function graph (an aggregate of the values)
 
 e.g.
@@ -297,24 +304,24 @@ this may or may not be significant in a real-world scenario
 
 func (lb *LoadBalancer) pickNode(sourceIpHash string) node {
 	var loadStats []LoadStatistics
-	for _, node := range lb.nodes {
-		_, presentSourceHash := lb.sourceToDestinationHashMap.Get(sourceIpHash)
-		conns, presentConns := lb.connections.Get(node.id)
+	for _, currentNode := range lb.nodes {
+		matchedNode, presentSourceHash := lb.sourceToDestinationHashMap.Get(sourceIpHash)
+		conns, presentConns := lb.connections.Get(currentNode.id)
 		if !presentConns {
 			conns = uint(0)
 		}
-		resTimes, presentResTimes := lb.responseTimes.Get(node.id)
+		resTimes, presentResTimes := lb.responseTimes.Get(currentNode.id)
 		if !presentResTimes {
 			resTimes = []time.Duration{}
 		}
-		nodeResources, presentResources := lb.nodeResources.Get(node.id)
+		nodeResources, presentResources := lb.nodeResources.Get(currentNode.id)
 		if !presentResources {
 			nodeResources = resources{}
 		}
 		stats := LoadStatistics{
-			node:              node,
+			node:              currentNode,
 			connections:       conns.(uint),
-			matchesSourceHash: presentSourceHash,
+			matchesSourceHash: presentSourceHash && matchedNode.(node).id == currentNode.id,
 			responseTimes:     resTimes.([]time.Duration),
 			usedResources:     nodeResources.(resources),
 		}
