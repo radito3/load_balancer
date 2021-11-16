@@ -274,32 +274,23 @@ this may mean that the server may not be operating well (it could also be becaus
 -------
 
 top level formula could look something like this:
-least connections out of all nodes order index * 0.15 (in other words, sort the amount of remaining connections per node
-	in descending order and take the node's index from that array)
-+
-percent of available connections * 0.15 (if max_conns == 30 and there are 15 active conns, this would be 50%)
+percent of available connections * 0.25 (if max_conns == 30 and there are 15 active conns, this would be 50%)
 +
 (if config.stickyConnections is true) 0.15 if hash(client.address) matches current node else 0
 +
-lowest max response time order index * 0.08
+max response time * 0.08
 +
-lowest average response time order index * 0.13
+average response time * 0.13
 +
-lowest average deviation order index * 0.04
+average deviation * 0.04
 +
-lowest CPU utilization order index * 0.15
+CPU utilization * 0.20
 +
-highest free memory order index * 0.15
+highest free memory order index * 0.15 (in other words, sort the amount of remaining memory per node
+	in descending order and take the node's index from that array)
 =
 total value
 => pick max out of nodes
-
-a point of interest / worth mentioning regarding using order indices instead of raw values
-(e.g. for cpu utilization - 1st (least utilized) instead of 5% compared to 50%)
-is that the order of differences is lost (the nodes are treated a lot more equally)
-(i.e. with 4 nodes - the difference between the 1st and 2nd is always 25%, where, in actuality, the difference
-	may be 5% and 90% cpu utilization - which is an ~80% difference => the difference between 25% and 80% is big)
-this may or may not be significant in a real-world scenario
 */
 
 func (lb *LoadBalancer) pickNode(sourceIpHash string) node {
