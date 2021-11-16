@@ -38,7 +38,7 @@ type LoadStatistics struct {
 type Config struct {
 	ServiceName                          string        `yaml:"serviceName"`
 	StickyConnections                    bool          `yaml:"stickyConnections"`
-	resourceMonitoringAgentQueryInterval time.Duration `yaml:"resource_monitoring_agent_query_interval"`
+	resourceMonitoringAgentQueryInterval time.Duration `yaml:"resourceMonitoringAgentQueryInterval"`
 	Nodes                                []NodeInfo    `yaml:"nodes"`
 }
 
