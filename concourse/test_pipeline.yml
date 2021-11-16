@@ -11,26 +11,11 @@ resources:
      uri: ((EMULATOR_GIST))
      skip_ssl_verification: true
 
-base-lb-params: &base-lb-params
-  STICKY_CONNECTIONS: true
-  POLL_RESOURCES_INTERVAL: 10s
-  NODES: >
-    - address: 127.0.0.1:81
-      resourceMonitorAgentPort: 82
-      maxConnections: 20
-    - address: 127.0.0.1:83
-      resourceMonitorAgentPort: 84
-      maxConnections: 15
-    - address: 127.0.0.1:85
-      resourceMonitorAgentPort: 86
-      maxConnections: 10
-
-
 jobs:
 - name: base-test
   serial: true
   plan:
-  - in_parallel:
+  - in_parallel: &fetch-repos
     - get: load-balancer-repo
       trigger: true
     - get: server-emulator-gist
@@ -38,8 +23,19 @@ jobs:
   - in_parallel:    
     - task: generate-load-balancer-config
       file: load-balancer-repo/concourse/tasks/generate-lb-config-task.yml
-      params:
-        <<: *base-lb-params
+      params: &base-lb-params
+        STICKY_CONNECTIONS: false
+        POLL_RESOURCES_INTERVAL: 10s
+        NODES: >
+          - address: 127.0.0.1:81
+            resourceMonitorAgentPort: 82
+            maxConnections: 20
+          - address: 127.0.0.1:83
+            resourceMonitorAgentPort: 84
+            maxConnections: 20
+          - address: 127.0.0.1:85
+            resourceMonitorAgentPort: 86
+            maxConnections: 20
     - task: generate-emulator-config
       file: load-balancer-repo/concourse/tasks/generate-emulator-config-task.yml
       params:
@@ -58,4 +54,32 @@ jobs:
     file: load-balancer-repo/concourse/tasks/base-test-task.yml
     params:
       TEST: basic-round-robin.sh
-    
+
+- name: sticky-connections-test
+  serial: true
+  plan:
+  - in_parallel: *fetch-repos
+  - in_parallel:    
+    - task: generate-load-balancer-config
+      file: load-balancer-repo/concourse/tasks/generate-lb-config-task.yml
+      params: 
+        <<: *base-lb-params
+        STICKY_CONNECTIONS: true
+    - task: generate-emulator-config
+      file: load-balancer-repo/concourse/tasks/generate-emulator-config-task.yml
+      params:
+        CPU_UTIL_PERCENT_1: 20
+        FREE_MEMORY_IN_KB_1: 20000
+        LATENCY_1: 1s
+        CPU_UTIL_PERCENT_2: 20
+        FREE_MEMORY_IN_KB_2: 20000
+        LATENCY_2: 1s
+        CPU_UTIL_PERCENT_3: 20
+        FREE_MEMORY_IN_KB_3: 20000
+        LATENCY_3: 1s
+  - task: build-executables
+    file: load-balancer-repo/concourse/tasks/build-executables-task.yml
+  - task: test-sticky-connections
+    file: load-balancer-repo/concourse/tasks/base-test-task.yml
+    params:
+      TEST: sticky-connections.sh
