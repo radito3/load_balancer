@@ -49,6 +49,9 @@ type NodeInfo struct {
 }
 
 func NewLoadBalancer(config Config) *LoadBalancer {
+	if config.resourceMonitoringAgentQueryInterval == time.Duration(0) {
+		config.resourceMonitoringAgentQueryInterval = 10 * time.Seconds
+	}
 	return &LoadBalancer{
 		serviceName:                          config.ServiceName,
 		useStickyConnections:                 config.StickyConnections,
@@ -125,7 +128,6 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 	address := node.address + ":" + strconv.Itoa(int(node.resourceMonitorPort))
 	addr, _ := net.ResolveUDPAddr("udp", address)
 	for {
-		log.Printf("calling %s for a resource summary...\n", addr.String())
 		conn, err := net.DialUDP("udp", nil, addr)
 		if err != nil {
 			log.Println(err)
@@ -134,7 +136,6 @@ func (lb *LoadBalancer) pollResourceMonitoringAgent(node node) {
 			continue
 		}
 		res := lb.readUsedResources(conn)
-		log.Printf("resources from %s: %v\n", addr.String(), res)
 		lb.nodeResources.Put(node.id, res)
 		conn.Close()
 		time.Sleep(lb.resourceMonitoringAgentQueryInterval)

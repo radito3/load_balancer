@@ -25,6 +25,8 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	log.Println(config)
+
 	loadBalancer := balancing.NewLoadBalancer(config)
 	log.Fatalln(loadBalancer.HandleTraffic(port))
 }
