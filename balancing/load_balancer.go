@@ -50,7 +50,7 @@ type NodeInfo struct {
 
 func NewLoadBalancer(config Config) *LoadBalancer {
 	if config.resourceMonitoringAgentQueryInterval == time.Duration(0) {
-		config.resourceMonitoringAgentQueryInterval = 10 * time.Seconds
+		config.resourceMonitoringAgentQueryInterval = 10 * time.Second
 	}
 	return &LoadBalancer{
 		serviceName:                          config.ServiceName,
