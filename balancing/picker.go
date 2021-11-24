@@ -37,7 +37,7 @@ func init() {
 	}
 }
 
-//Pick select node with the highest value based on following formula:
+//Pick selects the node with the highest value based on following formula:
 // percent of available connections * 0.25 (if max_conns == 30 and there are 15 active conns, this would be 50%)
 // +
 // (if config.stickyConnections is true) 0.15 if hash(client.address) matches current node else 0
@@ -53,46 +53,34 @@ func init() {
 // highest free memory order index * 0.15
 func (p *nodePicker) Pick() node {
 	resultMap := make(map[uint]float32, len(p.loadStatistics))
-	//percent available connections
 	for _, stats := range p.loadStatistics {
+		//percent available connections
 		maxConns := stats.node.maxConnections
 		percentAvailConns := float32(int(stats.connections)/maxConns) * float32(100)
 		resultMap[stats.node.id] += percentAvailConns * formulaCoefficients[percentAvailConnections]
-	}
-	//source IP hash
-	if p.stickyConnections {
-		for _, stats := range p.loadStatistics {
-			if stats.matchesSourceHash {
-				resultMap[stats.node.id] += formulaCoefficients[sourceIpHashMatch]
-			}
+		//source IP hash
+		if p.stickyConnections && stats.matchesSourceHash {
+			resultMap[stats.node.id] += formulaCoefficients[sourceIpHashMatch]
 		}
-	}
-	//max response time
-	for _, stats := range p.loadStatistics {
+		//max response time
 		maxRespTime := p.findMaxTime(stats.responseTimes)
 		resultMap[stats.node.id] += float32(maxRespTime.Milliseconds()) * formulaCoefficients[maxResponseTime]
-	}
-	//avg response time
-	for _, stats := range p.loadStatistics {
+		//avg response time
 		avgResponseTime := p.findAvgTime(stats.responseTimes)
 		resultMap[stats.node.id] += avgResponseTime * formulaCoefficients[averageResponseTime]
-	}
-	//std dev in response time
-	for _, stats := range p.loadStatistics {
+		//std dev in response time
 		stdDev := p.findStdDev(stats.responseTimes)
 		resultMap[stats.node.id] += stdDev * formulaCoefficients[averageDeviationInResponseTimes]
 	}
 	if p.shouldIncludeResourceInfo() {
-		//cpu utilization
-		for _, stats := range p.loadStatistics {
-			cpuUtilPercent := stats.usedResources.CpuUtilization
-			resultMap[stats.node.id] += float32(cpuUtilPercent) * formulaCoefficients[cpuUtilization]
-		}
-		//free memory
 		sort.Slice(p.loadStatistics, func(i, j int) bool {
 			return p.loadStatistics[i].usedResources.FreeMemory < p.loadStatistics[j].usedResources.FreeMemory
 		})
 		for i, stats := range p.loadStatistics {
+			//cpu utilization
+			cpuUtilPercent := stats.usedResources.CpuUtilization
+			resultMap[stats.node.id] += float32(cpuUtilPercent) * formulaCoefficients[cpuUtilization]
+			//free memory
 			resultMap[stats.node.id] += float32(i+1) * formulaCoefficients[highestFreeMemory]
 		}
 	}

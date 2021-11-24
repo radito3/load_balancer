@@ -99,10 +99,7 @@ func (lb *LoadBalancer) HandleTraffic(port int) error {
 		go lb.pollResourceMonitoringAgent(node)
 	}
 
-	address := &net.TCPAddr{
-		IP:   net.ParseIP("127.0.0.1"),
-		Port: port,
-	}
+	address, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:"+strconv.Itoa(port))
 	listener, err := net.ListenTCP("tcp", address)
 	if err != nil {
 		return err
@@ -148,6 +145,10 @@ func (lb *LoadBalancer) readUsedResources(conn *net.UDPConn) resources {
 
 	buff := make([]byte, 1024)
 	n, _, err := conn.ReadFromUDP(buff)
+	if err != nil {
+		log.Println(err)
+		return resources{}
+	}
 	return lb.parseResourcesFromJson(buff[:n])
 }
 
